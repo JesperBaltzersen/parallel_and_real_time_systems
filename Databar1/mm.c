@@ -60,6 +60,7 @@ void* embedded_malloc(size_t size) {
 
 	if (init_before != 39693895)
 	{
+		test til giyt
 		this_elem -> prev = lowest_available_physical_memory;
 		this_elem -> next = top_of_available_physical_memory;
 		this_elem -> data = lowest_available_physical_memory + header_size;
