@@ -20,7 +20,7 @@
  * check_mm.c.
  *
  */
-
+#include <stdio.h>
 #include <stdint.h>
 #include "mm.h"
 
@@ -48,6 +48,7 @@ void* embedded_malloc(size_t size) {
  * \todo { Implement malloc here. }
 */
 	int mem_start, mem_end;
+	//int *initialized_ptr;
 	int initialized;
 	int header_size, mem_size;
 	list_elem *this_elem, *new_elem;
@@ -63,56 +64,87 @@ void* embedded_malloc(size_t size) {
 	header_size = align(sizeof(list_elem));
 	mem_size = align(size);
 
+
 	//initialized holds value of last point in memory. Used to determine if the memory has been initialized before.
 	//If the value of initialized is == 39693896 then it has been init before.
+	//initialized_ptr = (int *)top_of_available_physical_memory;
+	//initialized = *initialized_ptr;
 	initialized = *(int* )top_of_available_physical_memory;
 
-	if (initialized != 39693895)
-	{
+//	printf("before init. mem_start: %x\n mem_end: %x \n", mem_start, mem_end);
+//	printf("initialized: %d\n", initialized);
+//	initialized = 39693895;
+//	printf("initialized: %d\n", initialized);
 
+
+	if ((int)initialized != 39693895){
+
+		printf("in initialize first elem\n");
 		this_elem -> prev = (list_elem *)mem_start;
 		this_elem -> next = (list_elem *)mem_end;
 		this_elem -> data = (void *)(mem_start + header_size);
-		this_elem -> data_size = mem_size;
-		this_elem -> status = 1;
+		this_elem -> data_size = (mem_end - (mem_start + header_size));
+		this_elem -> status = 0;
 
-		initialized = 39693895;
+		*(int* )top_of_available_physical_memory = 39693895;
+		//*(int* )top_of_available_physical_memory = 15151515;
 
-	}else{
+		//printf("initialized: \t %x\ntop: \t\t%x\n", initialized, *(int* )top_of_available_physical_memory);
+	}
 
 		do{
-			//If this elements data_size >= requested size and not big enough that there is room for an extra
-			//elements in the space that is left after the allocation then we use all the space
-			if ( (this_elem -> data_size >= mem_size) && (this_elem -> data_size <= mem_size + header_size) ){
+		printf("outside first else loop\n");
+			if (this_elem -> status == 0){
+				printf("\tinside first else loop\n");
 
-				return this_elem -> data;
+				//If this elements data_size >= requested size and not big enough that there is room for an extra
+				//elements in the space that is left after the allocation then we use all the space
+				if ( (this_elem -> data_size >= mem_size) && (this_elem -> data_size <= mem_size + header_size) ){
+					printf("\tin 1 if\n");
+					printf("\tthis_elem -> data: %x\n", (int)this_elem -> data);
+					return this_elem -> data;
 
-			//If the this elements data size > requested size and big enough that there is room for an extra element
-			//we create a new element with free data chunk in the space that is left over
-			}else if ( (this_elem -> data_size + header_size) > mem_size){
+				//If the this elements data size > requested size and big enough that there is room for an extra element
+				//we create a new element with free data chunk in the space that is left over
+				}else if ( (this_elem -> data_size + header_size) > mem_size){
+					printf("\tin 2 if\n");
 
-				//create new elem in space that is left after allocating new mem block
-				new_elem = this_elem + mem_size;
-				new_elem -> prev = this_elem;
-				new_elem -> next = this_elem -> next;
-				new_elem -> data = new_elem + header_size;
-				new_elem -> data_size = this_elem -> data_size - mem_size - header_size;
-				new_elem -> status = 0;
+					//create new elem in space that is left after allocating new mem block
+					new_elem = this_elem + mem_size;
+					new_elem -> prev = this_elem;
+					new_elem -> next = this_elem -> next;
+					new_elem -> data = new_elem + header_size;
+					new_elem -> data_size = this_elem -> data_size - mem_size - header_size;
+					new_elem -> status = 0;
 
-				//update this_elem
-				this_elem -> next = new_elem;
-				this_elem -> data_size = mem_size;
-				this_elem -> status = 1;
+					//update this_elem
+					this_elem -> next = new_elem;
+					this_elem -> data_size = mem_size;
+					this_elem -> status = 1;
 
-				return this_elem -> data;
+					//DEBUG start
+					printf("\tmem_start+header_size: \t\t%d\n", (int) mem_start + header_size);
+					printf("\treturn this_elem -> data;: \t%d\n", (int) this_elem -> data);
+					printf("\tnew_elem -> data;: \t\t%d\n", (int) new_elem -> data);
+					int temp = ((int) this_elem -> data) - ((int) new_elem -> data);
+					printf("\talloc space: \t\t\t%d\n", temp);
+					printf("\tnew_elem -> data_size: \t\t%d\n", (int)new_elem -> data_size);
+					printf("\tthis_elem -> data_size: \t\t%d\n", (int)this_elem -> data_size);
+					//DEBUG end
 
-			}else{ //if we didn't find a space search next element of linked list
-				this_elem = this_elem -> next;
+					printf("returning");
+					return this_elem -> data;
+
+				}else{ //if we didn't find a space search next element of linked list
+					printf("\tin 3 else\n");
+
+					this_elem = this_elem -> next;
+				}
 			}
 		}
 		//stop searching if this element next pointer points to last place in memory
 		while ((int)this_elem -> next != mem_end);
-	}
+
 
 	//return 0 if we don't have space in memory
 	return 0;
@@ -120,7 +152,8 @@ void* embedded_malloc(size_t size) {
 
 int align(int data_size)
 {
-	return (((data_size / 32) + 1 )* 32) - data_size;
+
+	return (((data_size / 32) + 1 )* 32);
 }
 
 /**
