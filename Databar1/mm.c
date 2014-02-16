@@ -31,7 +31,6 @@ typedef struct S {
 	struct S* next;
 	void* data;
 	int data_size;
-	int data_and_header_size_aligned;
 	int status; //1 for full, 0 for empty
 } list_elem;
 /**
@@ -48,55 +47,75 @@ void* embedded_malloc(size_t size) {
 /**
  * \todo { Implement malloc here. }
 */
-	int mem_start;
-	int init_before;
-	int header_size;
-	list_elem *prev_elem, *next_elem, *this_elem;
+	int mem_start, mem_end;
+	int initialized;
+	int header_size, mem_size;
+	list_elem *this_elem, *new_elem;
 
+	//init values
+	mem_start = (int)lowest_available_physical_memory;
+	mem_end = ((int)top_of_available_physical_memory) - 1;	//top_mem = initialized variable
+
+	//init linked list elem.
 	this_elem = (list_elem*)lowest_available_physical_memory;
+
+	//align all sizes to 32 bit values
 	header_size = align(sizeof(list_elem));
+	mem_size = align(size);
 
-	init_before = *(int* )top_of_available_physical_memory;
+	//initialized holds value of last point in memory. Used to determine if the memory has been initialized before.
+	//If the value of initialized is == 39693896 then it has been init before.
+	initialized = *(int* )top_of_available_physical_memory;
 
-	if (init_before != 39693895)
+	if (initialized != 39693895)
 	{
 
-		this_elem -> prev = (list_elem *)lowest_available_physical_memory;
-		this_elem -> next = (list_elem *)top_of_available_physical_memory;
-		this_elem -> data = (void *)(lowest_available_physical_memory + header_size);
-		this_elem -> data_and_header_size_aligned = header_size + align(size);
-		this_elem -> data_size = size;
+		this_elem -> prev = (list_elem *)mem_start;
+		this_elem -> next = (list_elem *)mem_end;
+		this_elem -> data = (void *)(mem_start + header_size);
+		this_elem -> data_size = mem_size;
 		this_elem -> status = 1;
 
-		*(int *)top_of_available_physical_memory = 39693895;
+		initialized = 39693895;
 
-	}else
-	{
-		int search_on = 0;
+	}else{
 
-		while (search_on == 0)
-		{
-			int calc_space, needed_space;
-			calc_space = (int)next_elem - ((int)this_elem + align(size) + header_size);
-			needed_space = align(header_size) + align(size);
+		do{
+			//If this elements data_size >= requested size and not big enough that there is room for an extra
+			//elements in the space that is left after the allocation then we use all the space
+			if ( (this_elem -> data_size >= mem_size) && (this_elem -> data_size <= mem_size + header_size) ){
 
-			if (calc_space >= needed_space ){
-				this_elem -> prev = prev_elem;
-				this_elem -> next = prev_elem -> next;
-				this_elem -> data = this_elem + header_size;
-				this_elem -> data_size = size;
-				this_elem -> data_and_header_size_aligned = align(header_size + size);
+				return this_elem -> data;
+
+			//If the this elements data size > requested size and big enough that there is room for an extra element
+			//we create a new element with free data chunk in the space that is left over
+			}else if ( (this_elem -> data_size + header_size) > mem_size){
+
+				//create new elem in space that is left after allocating new mem block
+				new_elem = this_elem + mem_size;
+				new_elem -> prev = this_elem;
+				new_elem -> next = this_elem -> next;
+				new_elem -> data = new_elem + header_size;
+				new_elem -> data_size = this_elem -> data_size - mem_size - header_size;
+				new_elem -> status = 0;
+
+				//update this_elem
+				this_elem -> next = new_elem;
+				this_elem -> data_size = mem_size;
 				this_elem -> status = 1;
+
+				return this_elem -> data;
+
+			}else{ //if we didn't find a space search next element of linked list
+				this_elem = this_elem -> next;
 			}
-			prev_elem -> next = this_elem;
-
-			next_elem -> prev = this_elem;
-
-
 		}
+		//stop searching if this element next pointer points to last place in memory
+		while ((int)this_elem -> next != mem_end);
 	}
 
-	return this_elem -> data;
+	//return 0 if we don't have space in memory
+	return 0;
 }
 
 int align(int data_size)
@@ -117,8 +136,34 @@ void embedded_free(void * ptr) {
 /**
  * \todo { Implement free here. }
 */
+	list_elem *this_elem, *prev_elem, *next_elem;
+	int header_size;
+
+	this_elem = (list_elem*)ptr;
+
+	header_size = align(sizeof(list_elem));
+
+	//setup adjacent linked list elements
+	prev_elem = this_elem -> prev;
+	next_elem = this_elem -> next;
+
+	//if adjacent elements are free, merge them with this one
+
+	//both elements are free add size of both headers and their data
+	if ((prev_elem -> status == 0) && (next_elem -> status == 0)){
+		prev_elem -> data_size = prev_elem -> data_size + 2*header_size + this_elem -> data_size + next_elem -> data_size;
+
+	//if only prev_elem is free
+	}else if ( prev_elem -> status == 0){
+		prev_elem -> data_size = prev_elem -> data_size + header_size + this_elem -> data_size;
+
+	//if only next_elem is free
+	}else if ( next_elem -> status == 0){
+		this_elem -> data_size = this_elem -> data_size + header_size + next_elem -> data_size;
+
+	//if no adjacent elements are free just update status of this one
+	}else{
+		this_elem -> status = 0;
+	}
 
 }
-
-/* Put any code you need to add here. */
-
