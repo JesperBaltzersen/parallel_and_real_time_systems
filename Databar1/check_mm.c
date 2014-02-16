@@ -55,6 +55,7 @@ START_TEST (test_simple_allocation)
   int *ptr1;
 
   ptr1 = embedded_malloc(10 * sizeof(int));
+  printf("returned to check_mm.c");
 
 /* Test whether each pointer have unique addresses*/
   ck_assert(ptr1 != 0);
